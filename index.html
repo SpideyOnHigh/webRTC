@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>WebRTC Keeplinks POC</title>
+  <title>Code-Based WebRTC Chat</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, textarea, button { width: 100%; margin: 10px 0; padding: 10px; }
@@ -10,7 +10,7 @@
 </head>
 <body>
 
-<h2>Code WebRTC Chat</h2>
+<h2>🔢 Code-Based WebRTC Chat</h2>
 
 <input id="roomCode" placeholder="Enter Room Code (e.g. room123)" />
 <button onclick="joinRoom()">Join Room</button>
@@ -29,7 +29,7 @@
   const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
   function log(text) {
-    chat.textContent += text + "\n";
+    chat.textContent += text + "\\n";
     chat.scrollTop = chat.scrollHeight;
   }
 
@@ -37,7 +37,7 @@
     const room = document.getElementById("roomCode").value;
     if (!room) return alert("Enter a room code");
 
-    socket = new WebSocket("wss://087d3667-bff0-4ec7-8fda-273b3bfb4c17-00-35xnc7h534r9p.spock.replit.dev:3000");
+    socket = new WebSocket("wss://087d3667-bff0-4ec7-8fda-273b3bfb4c17-00-35xnc7h534r9p.spock.replit.dev");
 
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: "join", room }));
