@@ -37,7 +37,7 @@
     const room = document.getElementById("roomCode").value;
     if (!room) return alert("Enter a room code");
 
-    socket = new WebSocket("wss://087d3667-bff0-4ec7-8fda-273b3bfb4c17-00-35xnc7h534r9p.spock.replit.dev");
+    socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
 
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: "join", room }));
