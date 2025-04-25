@@ -29,8 +29,9 @@
   const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
   function log(text) {
-    chat.textContent += text + "\\n";
+    chat.textContent += text + "\n";
     chat.scrollTop = chat.scrollHeight;
+    console.log("[chat]", text);
   }
 
   function joinRoom() {
@@ -40,16 +41,20 @@
     socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
 
     socket.onopen = () => {
+      console.log("🔌 WebSocket connected");
       socket.send(JSON.stringify({ type: "join", room }));
       document.getElementById("connectionStatus").textContent = "Status: Joined room, waiting...";
     };
 
     socket.onmessage = async (event) => {
+      console.log("[message received]", event.data);
       const msg = JSON.parse(event.data);
 
       if (msg.type === "ready") {
+        console.log("✅ Got READY — starting peer");
         startPeer(true);
       } else if (msg.type === "signal") {
+        console.log("📨 Got SIGNAL");
         if (!pc) await startPeer(false);
         const signal = msg.data;
 
@@ -59,9 +64,11 @@
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             socket.send(JSON.stringify({ type: "signal", data: pc.localDescription }));
+            console.log("📤 Sent answer");
           }
         } else if (signal.candidate) {
           await pc.addIceCandidate(new RTCIceCandidate(signal));
+          console.log("➕ Added ICE candidate");
         }
       }
     };
@@ -73,24 +80,34 @@
     pc.onicecandidate = e => {
       if (e.candidate) {
         socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
+        console.log("📡 Sent ICE candidate");
       }
     };
 
     pc.ondatachannel = e => {
       channel = e.channel;
       channel.onmessage = e => log("Peer: " + e.data);
-      channel.onopen = () => document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
+      channel.onopen = () => {
+        document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
+        console.log("✅ Data channel opened (responder)");
+      };
     };
 
     if (isInitiator) {
       channel = pc.createDataChannel("chat");
       channel.onmessage = e => log("Peer: " + e.data);
-      channel.onopen = () => document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
+      channel.onopen = () => {
+        document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
+        console.log("✅ Data channel opened (initiator)");
+      };
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.send(JSON.stringify({ type: "signal", data: offer }));
+      console.log("📤 Sent offer");
     }
+
+    console.log("🔧 startPeer called | initiator =", isInitiator);
   }
 
   function sendMessage() {
