@@ -1,140 +1,106 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Debug WebRTC P2P Chat</title>
+  <title>WebRTC Keeplinks POC</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 700px; margin: auto; }
-    textarea, input { width: 100%; margin-top: 10px; padding: 10px; font-family: monospace; }
-    button { margin: 10px 0; padding: 10px 20px; }
-    .step { margin-top: 20px; padding: 10px; background: #f0f0f0; border-left: 4px solid #007BFF; }
-    .log { font-size: 0.9em; white-space: pre-wrap; background: #eaeaea; padding: 10px; margin-top: 10px; height: 150px; overflow-y: auto; }
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    input, textarea, button { width: 100%; margin: 10px 0; padding: 10px; }
+    #chat { background: #f9f9f9; height: 200px; overflow-y: auto; padding: 10px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
 
-<h2>🔍 Debug WebRTC P2P Chat (Copy & Paste)</h2>
+<h2>Code WebRTC Chat</h2>
 
-<div class="step">
-  <h3>Step 1: Generate Offer (Peer A)</h3>
-  <button onclick="generateOffer()">Generate Offer</button>
-  <textarea id="offerOut" readonly placeholder="Copy and share this offer with Peer B..."></textarea>
-</div>
+<input id="roomCode" placeholder="Enter Room Code (e.g. room123)" />
+<button onclick="joinRoom()">Join Room</button>
 
-<div class="step">
-  <h3>Step 2: Paste Offer & Create Answer (Peer B)</h3>
-  <textarea id="offerIn" placeholder="Paste offer from Peer A..."></textarea>
-  <button onclick="createAnswer()">Create Answer</button>
-  <textarea id="answerOut" readonly placeholder="Copy and send this answer back to Peer A..."></textarea>
-</div>
+<div id="connectionStatus">Status: Not Connected</div>
 
-<div class="step">
-  <h3>Step 3: Paste Answer (Peer A)</h3>
-  <textarea id="answerIn" placeholder="Paste answer from Peer B..."></textarea>
-  <button onclick="finishConnection()">Finish Connection</button>
-</div>
+<input id="message" placeholder="Type a message..." />
+<button onclick="sendMessage()">Send</button>
 
-<div class="step">
-  <h3>Step 4: Chat</h3>
-  <input id="message" placeholder="Type a message..." />
-  <button onclick="sendMessage()">Send</button>
-  <div id="chat" class="log"></div>
-</div>
-
-<div class="step">
-  <h3>🔎 Connection Log</h3>
-  <div id="log" class="log"></div>
-</div>
+<div id="chat">Chat log:</div>
 
 <script>
-  let pc, channel;
+  let socket, pc, channel;
+  const chat = document.getElementById("chat");
 
   const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
   function log(text) {
-    const logDiv = document.getElementById("log");
-    logDiv.textContent += text + "\n";
-    logDiv.scrollTop = logDiv.scrollHeight;
+    chat.textContent += text + "\n";
+    chat.scrollTop = chat.scrollHeight;
   }
 
-  function chatLog(text) {
-    const chatDiv = document.getElementById("chat");
-    chatDiv.textContent += text + "\n";
-    chatDiv.scrollTop = chatDiv.scrollHeight;
-  }
+  function joinRoom() {
+    const room = document.getElementById("roomCode").value;
+    if (!room) return alert("Enter a room code");
 
-  function waitForIceComplete(pc) {
-    return new Promise(resolve => {
-      if (pc.iceGatheringState === "complete") return resolve();
-      pc.onicegatheringstatechange = () => {
-        log("ICE gathering state: " + pc.iceGatheringState);
-        if (pc.iceGatheringState === "complete") resolve();
-      };
-    });
-  }
+    socket = new WebSocket("wss://087d3667-bff0-4ec7-8fda-273b3bfb4c17-00-35xnc7h534r9p.spock.replit.dev");
 
-  function setupChannel(dc) {
-    channel = dc;
-    channel.onopen = () => {
-      chatLog("[✔️ Connection Ready]");
-      log("Data channel state: " + dc.readyState);
-    };
-    channel.onmessage = e => chatLog("Peer: " + e.data);
-    log("Data channel initialized.");
-  }
-
-  async function generateOffer() {
-    pc = new RTCPeerConnection(servers);
-    const dc = pc.createDataChannel("chat");
-    setupChannel(dc);
-
-    pc.onicecandidate = e => {
-      if (e.candidate) log("ICE candidate (offer): " + JSON.stringify(e.candidate));
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ type: "join", room }));
+      document.getElementById("connectionStatus").textContent = "Status: Joined room, waiting...";
     };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    log("Local offer created. Waiting for ICE...");
+    socket.onmessage = async (event) => {
+      const msg = JSON.parse(event.data);
 
-    await waitForIceComplete(pc);
-    log("ICE complete. Offer ready.");
-    document.getElementById("offerOut").value = JSON.stringify(pc.localDescription);
+      if (msg.type === "ready") {
+        startPeer(true);
+      } else if (msg.type === "signal") {
+        if (!pc) await startPeer(false);
+        const signal = msg.data;
+
+        if (signal.sdp) {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal));
+          if (signal.type === "offer") {
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.send(JSON.stringify({ type: "signal", data: pc.localDescription }));
+          }
+        } else if (signal.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(signal));
+        }
+      }
+    };
   }
 
-  async function createAnswer() {
-    const offer = JSON.parse(document.getElementById("offerIn").value);
+  async function startPeer(isInitiator) {
     pc = new RTCPeerConnection(servers);
 
-    pc.ondatachannel = e => setupChannel(e.channel);
     pc.onicecandidate = e => {
-      if (e.candidate) log("ICE candidate (answer): " + JSON.stringify(e.candidate));
+      if (e.candidate) {
+        socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
+      }
     };
 
-    await pc.setRemoteDescription(offer);
-    log("Remote offer set.");
+    pc.ondatachannel = e => {
+      channel = e.channel;
+      channel.onmessage = e => log("Peer: " + e.data);
+      channel.onopen = () => document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
+    };
 
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    log("Local answer created. Waiting for ICE...");
+    if (isInitiator) {
+      channel = pc.createDataChannel("chat");
+      channel.onmessage = e => log("Peer: " + e.data);
+      channel.onopen = () => document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
 
-    await waitForIceComplete(pc);
-    log("ICE complete. Answer ready.");
-    document.getElementById("answerOut").value = JSON.stringify(pc.localDescription);
-  }
-
-  async function finishConnection() {
-    const answer = JSON.parse(document.getElementById("answerIn").value);
-    await pc.setRemoteDescription(answer);
-    log("Remote answer set. Waiting for connection...");
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.send(JSON.stringify({ type: "signal", data: offer }));
+    }
   }
 
   function sendMessage() {
     const msg = document.getElementById("message").value;
     if (channel && channel.readyState === "open") {
       channel.send(msg);
-      chatLog("You: " + msg);
+      log("You: " + msg);
       document.getElementById("message").value = "";
     } else {
-      alert("Connection not ready. Please wait.");
+      alert("Connection not ready yet.");
     }
   }
 </script>
