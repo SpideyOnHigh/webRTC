@@ -43,7 +43,7 @@ function joinRoom() {
   const room = document.getElementById("roomCode").value.trim();
   if (!room) return alert("Enter a room code");
 
-  socket = new WebSocket("wss://your-signaling-server.com");
+  socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
 
   socket.onopen = () => {
     socket.send(JSON.stringify({ type: "join", room }));
