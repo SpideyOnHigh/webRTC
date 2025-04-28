@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Code-Based WebRTC Chat (Auto Role)</title>
+  <title>Code-Based WebRTC Chat</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, textarea, button { width: 100%; margin: 10px 0; padding: 10px; }
@@ -10,7 +10,7 @@
 </head>
 <body>
 
-<h2>🔁 WebRTC Chat – Auto-Role Based</h2>
+<h2>🔁 WebRTC Cross-Platform Chat (Web ↔ Flutter)</h2>
 
 <input id="roomCode" placeholder="Enter Room Code (e.g. room123)" />
 <button onclick="joinRoom()">Join Room</button>
@@ -23,13 +23,14 @@
 <div id="chat">Chat log:</div>
 
 <script>
-  let socket, pc, channel, isInitiator = false;
+  let socket, pc, channel;
+  let isInitiator = false;
   const chat = document.getElementById("chat");
 
   const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
   function log(text) {
-    chat.textContent += text + "\n";
+    chat.textContent += text + "\\n";
     chat.scrollTop = chat.scrollHeight;
     console.log("[log]", text);
   }
@@ -50,27 +51,35 @@
       console.log("[Socket Message]", msg);
 
       if (msg.type === "ready") {
-        // Decide role deterministically: peer with lower random number becomes initiator
-        isInitiator = Math.random() < 0.5;
-        console.log("Assigned role:", isInitiator ? "Initiator" : "Responder");
+        isInitiator = Date.now() % 2 === 0; // randomize who becomes initiator
+        console.log("Assigned initiator:", isInitiator);
         await startPeer();
+        if (isInitiator) {
+          channel = pc.createDataChannel("chat");
+          setupChannel();
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.send(JSON.stringify({ type: "signal", data: offer }));
+          console.log("📤 Sent offer");
+        }
       } else if (msg.type === "signal") {
         const signal = msg.data;
         if (!pc) await startPeer();
 
         if (signal.sdp) {
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
-          console.log("Set remote SDP:", signal.type);
+          console.log("📥 Set Remote Description:", signal.type);
 
           if (signal.type === "offer") {
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             socket.send(JSON.stringify({ type: "signal", data: pc.localDescription }));
-            console.log("Sent answer");
+            console.log("📤 Sent answer");
           }
         } else if (signal.candidate) {
           await pc.addIceCandidate(new RTCIceCandidate(signal));
-          console.log("Added ICE candidate");
+          console.log("➕ Added ICE Candidate");
         }
       }
     };
@@ -81,37 +90,26 @@
 
     pc = new RTCPeerConnection(servers);
 
-    pc.onicecandidate = e => {
+    pc.onicecandidate = (e) => {
       if (e.candidate) {
         socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
-        console.log("Sent ICE candidate");
       }
     };
 
-    pc.ondatachannel = e => {
+    pc.ondatachannel = (e) => {
       channel = e.channel;
-      channel.onopen = () => {
-        document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
-        console.log("Data channel open (responder)");
-      };
-      channel.onmessage = e => log("Peer: " + e.data);
+      setupChannel();
     };
+  }
 
-    if (isInitiator) {
-      channel = pc.createDataChannel("chat");
-      channel.onopen = () => {
-        document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
-        console.log("Data channel open (initiator)");
-      };
-      channel.onmessage = e => log("Peer: " + e.data);
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.send(JSON.stringify({ type: "signal", data: offer }));
-      console.log("Sent offer");
-    }
-
-    console.log("WebRTC peer initialized");
+  function setupChannel() {
+    channel.onopen = () => {
+      document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
+      log("✅ Data Channel Open");
+    };
+    channel.onmessage = (e) => {
+      log("Peer: " + e.data);
+    };
   }
 
   function sendMessage() {
