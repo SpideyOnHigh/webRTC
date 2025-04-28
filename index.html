@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>WebRTC Chat (Web ↔ Flutter) + File Transfer</title>
+  <title>WebRTC Chat + File Transfer</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, textarea, button { width: 100%; margin: 10px 0; padding: 10px; }
@@ -10,7 +10,7 @@
 </head>
 <body>
 
-<h2>🔁 WebRTC Cross Chat + File Transfer</h2>
+<h2>WebRTC Chat + File Transfer</h2>
 
 <input id="roomCode" placeholder="Enter Room Code" />
 <button onclick="joinRoom()">Join Room</button>
@@ -20,161 +20,161 @@
 <input id="message" placeholder="Type your message..." />
 <button onclick="sendText()">Send Text</button>
 
-<br><br>
 <input type="file" id="fileInput" />
 <button onclick="sendFile()">Send File</button>
 
 <div id="chat">Chat log:</div>
 
 <script>
-  let socket, pc, channel;
-  let isInitiator = false;
-  const chat = document.getElementById("chat");
-  const chunkSize = 32 * 1024; // 32 KB
-  const fileBuffer = {};
+let socket, pc, channel;
+let isInitiator = false;
+const chat = document.getElementById("chat");
+const chunkSize = 32 * 1024;
+const fileBuffer = {};
 
-  const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
-  function log(text) {
-    chat.textContent += text + "\\n";
-    chat.scrollTop = chat.scrollHeight;
-    console.log("[log]", text);
-  }
+function log(text) {
+  chat.textContent += text + "\\n";
+  chat.scrollTop = chat.scrollHeight;
+}
 
-  function joinRoom() {
-    const room = document.getElementById("roomCode").value.trim();
-    if (!room) return alert("Enter a room code");
+function joinRoom() {
+  const room = document.getElementById("roomCode").value.trim();
+  if (!room) return alert("Enter a room code");
 
-    socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
+  socket = new WebSocket("wss://your-signaling-server.com");
 
-    socket.onopen = () => {
-      socket.send(JSON.stringify({ type: "join", room }));
-      document.getElementById("connectionStatus").textContent = "Status: Joined room, waiting...";
-    };
+  socket.onopen = () => {
+    socket.send(JSON.stringify({ type: "join", room }));
+    document.getElementById("connectionStatus").textContent = "Status: Joined room, waiting...";
+  };
 
-    socket.onmessage = async (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === "ready") {
-        isInitiator = msg.initiator;
-        await startPeer();
-        if (isInitiator) {
-          channel = pc.createDataChannel("chat");
-          setupChannel();
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.send(JSON.stringify({ type: "signal", data: offer }));
+  socket.onmessage = async (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "ready") {
+      isInitiator = msg.initiator;
+      await startPeer();
+      if (isInitiator) {
+        channel = pc.createDataChannel("chat");
+        setupChannel();
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.send(JSON.stringify({ type: "signal", data: offer }));
+      }
+    } else if (msg.type === "signal") {
+      const signal = msg.data;
+      if (!pc) await startPeer();
+      if (signal.sdp) {
+        await pc.setRemoteDescription(new RTCSessionDescription(signal));
+        if (signal.type === "offer") {
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.send(JSON.stringify({ type: "signal", data: pc.localDescription }));
         }
-      } else if (msg.type === "signal") {
-        const signal = msg.data;
-        if (!pc) await startPeer();
-        if (signal.sdp) {
-          await pc.setRemoteDescription(new RTCSessionDescription(signal));
-          if (signal.type === "offer") {
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            socket.send(JSON.stringify({ type: "signal", data: pc.localDescription }));
-          }
-        } else if (signal.candidate) {
-          await pc.addIceCandidate(new RTCIceCandidate(signal));
-        }
+      } else if (signal.candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(signal));
       }
-    };
-  }
-
-  async function startPeer() {
-    if (pc) return;
-    pc = new RTCPeerConnection(servers);
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
-      }
-    };
-
-    pc.ondatachannel = (e) => {
-      channel = e.channel;
-      setupChannel();
-    };
-  }
-
-  function setupChannel() {
-    channel.onopen = () => {
-      document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
-      log("✅ Data Channel Open");
-    };
-    channel.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.type === "text") {
-        log("Peer: " + data.content);
-      } else if (data.type === "file-chunk") {
-        receiveFileChunk(data);
-      }
-    };
-  }
-
-  function sendText() {
-    const msg = document.getElementById("message").value.trim();
-    if (msg && channel && channel.readyState === "open") {
-      channel.send(JSON.stringify({ type: "text", content: msg }));
-      log("You: " + msg);
-      document.getElementById("message").value = "";
-    } else {
-      alert("Connection not ready.");
     }
-  }
+  };
+}
 
-  function sendFile() {
-    const fileInput = document.getElementById("fileInput");
-    if (!fileInput.files.length) return alert("Select a file first!");
-
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-    const fileId = Date.now().toString();
-
-    reader.onload = async () => {
-      const arrayBuffer = reader.result;
-      const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
-
-      for (let i = 0; i < totalChunks; i++) {
-        const chunk = arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize);
-        const chunkBase64 = btoa(String.fromCharCode(...new Uint8Array(chunk)));
-
-        channel.send(JSON.stringify({
-          type: "file-chunk",
-          fileId,
-          filename: file.name,
-          sequence: i,
-          totalChunks,
-          data: chunkBase64,
-          isLast: i === totalChunks - 1
-        }));
-      }
-      log("📤 Sending file: " + file.name);
-    };
-
-    reader.readAsArrayBuffer(file);
-  }
-
-  function receiveFileChunk(data) {
-    if (!fileBuffer[data.fileId]) {
-      fileBuffer[data.fileId] = { chunks: [], filename: data.filename, totalChunks: data.totalChunks };
+async function startPeer() {
+  if (pc) return;
+  pc = new RTCPeerConnection(servers);
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
     }
-    fileBuffer[data.fileId].chunks[data.sequence] = data.data;
+  };
+  pc.ondatachannel = (e) => {
+    channel = e.channel;
+    setupChannel();
+  };
+}
 
-    if (data.isLast) {
-      const completeData = fileBuffer[data.fileId].chunks.join('');
-      const byteArray = Uint8Array.from(atob(completeData), c => c.charCodeAt(0));
-      const blob = new Blob([byteArray]);
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileBuffer[data.fileId].filename;
-      a.click();
-      log("✅ File received: " + fileBuffer[data.fileId].filename);
-      delete fileBuffer[data.fileId];
+function setupChannel() {
+  channel.onopen = () => {
+    document.getElementById("connectionStatus").textContent = "Status: Connected ✅";
+    log("Data Channel Open");
+  };
+  channel.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === "text") {
+      log("Peer: " + data.content);
+    } else if (data.type === "file-chunk") {
+      receiveFileChunk(data);
     }
+  };
+}
+
+function sendText() {
+  const msg = document.getElementById("message").value;
+  if (msg && channel && channel.readyState === "open") {
+    channel.send(JSON.stringify({ type: "text", content: msg }));
+    log("You: " + msg);
+    document.getElementById("message").value = "";
   }
+}
+
+function sendFile() {
+  const fileInput = document.getElementById("fileInput");
+  if (!fileInput.files.length) return alert("Select a file first!");
+
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+  const fileId = Date.now().toString();
+
+  reader.onload = () => {
+    const arrayBuffer = reader.result;
+    const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
+
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize);
+      const chunkBase64 = btoa(String.fromCharCode(...new Uint8Array(chunk)));
+
+      channel.send(JSON.stringify({
+        type: "file-chunk",
+        fileId,
+        filename: file.name,
+        sequence: i,
+        totalChunks,
+        data: chunkBase64,
+        isLast: i === totalChunks - 1
+      }));
+    }
+    log("📤 Sent file: " + file.name);
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+function receiveFileChunk(data) {
+  if (!fileBuffer[data.fileId]) {
+    fileBuffer[data.fileId] = [];
+  }
+  fileBuffer[data.fileId][data.sequence] = atob(data.data);
+
+  if (data.isLast) {
+    const completeBinary = fileBuffer[data.fileId].join('');
+    const byteArray = new Uint8Array(completeBinary.length);
+    for (let i = 0; i < completeBinary.length; i++) {
+      byteArray[i] = completeBinary.charCodeAt(i);
+    }
+
+    const blob = new Blob([byteArray]);
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = data.filename || "received_file";
+    a.click();
+
+    log("✅ File received and downloaded");
+
+    delete fileBuffer[data.fileId];
+  }
+}
 </script>
 
 </body>
