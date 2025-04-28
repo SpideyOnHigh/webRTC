@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>WebRTC Chat (Cross-Platform)</title>
+  <title>WebRTC Cross Chat (Web ↔ Flutter)</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     input, textarea, button { width: 100%; margin: 10px 0; padding: 10px; }
@@ -10,7 +10,7 @@
 </head>
 <body>
 
-<h2>🔁 WebRTC Chat (Web ↔ Flutter)</h2>
+<h2>🔗 WebRTC Cross Chat</h2>
 
 <input id="roomCode" placeholder="Enter Room Code" />
 <button onclick="joinRoom()">Join Room</button>
@@ -36,7 +36,7 @@
   }
 
   function joinRoom() {
-    const room = document.getElementById("roomCode").value;
+    const room = document.getElementById("roomCode").value.trim();
     if (!room) return alert("Enter a room code");
 
     socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
@@ -51,7 +51,7 @@
       console.log("[Socket Message]", msg);
 
       if (msg.type === "ready") {
-        isInitiator = msg.initiator; // 👈 read initiator role from server
+        isInitiator = msg.initiator;
         console.log("Assigned initiator:", isInitiator);
         await startPeer();
         if (isInitiator) {
