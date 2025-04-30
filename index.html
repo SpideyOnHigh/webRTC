@@ -2,108 +2,212 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebRTC Transfer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WebRTC Chat + File Transfer</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
-<body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-6">
+<body class="bg-gradient-to-br from-gray-900 to-gray-800 text-white min-h-screen flex flex-col items-center p-6">
 
-  <!-- Step 1: Role Selection -->
-  <div id="homeUI" class="space-y-6">
-    <h1 class="text-3xl font-bold text-center">🚀 WebRTC File & Chat</h1>
-    <p class="text-center text-gray-400">Choose your role</p>
-    <div class="flex gap-4 justify-center">
-      <button id="btnSend" class="bg-green-600 px-6 py-3 rounded-lg text-white hover:bg-green-500">📤 Send</button>
-      <button id="btnReceive" class="bg-blue-600 px-6 py-3 rounded-lg text-white hover:bg-blue-500">📥 Receive</button>
-    </div>
+  <!-- Header -->
+  <h1 class="text-3xl font-bold mt-4">🔗 WebRTC File & Chat</h1>
+  <p class="text-gray-400 mb-6 text-center text-sm">Secure peer-to-peer transfer via WebRTC</p>
+
+  <!-- Role Selection -->
+  <div id="selectRole" class="space-y-4 text-center">
+    <button id="btnSend" class="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg">📤 Send File / Chat</button>
+    <button id="btnReceive" class="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg">📥 Receive File / Chat</button>
   </div>
 
-  <!-- Step 2: Share Room Code (for Sender) -->
-  <div id="sendUI" class="hidden space-y-4 mt-6 text-center">
-    <h2 class="text-2xl font-bold">Share this code</h2>
-    <div id="roomCodeDisplay" class="text-3xl font-mono bg-gray-800 py-2 px-4 rounded">-</div>
-    <div id="qrcode" class="mx-auto"></div>
-    <p class="text-gray-400 text-sm">Ask receiver to scan or enter the code</p>
+  <!-- Sender UI -->
+  <div id="sendUI" class="hidden flex flex-col items-center space-y-4">
+    <p class="text-lg">Share this room code</p>
+    <div id="roomCodeDisplay" class="text-2xl font-mono bg-gray-800 px-4 py-2 rounded shadow"></div>
+    <div id="qrcode" class="mt-2"></div>
+    <p class="text-sm text-gray-400">Ask receiver to enter code or scan QR</p>
   </div>
 
-  <!-- Step 3: Enter Code (for Receiver) -->
-  <div id="receiveUI" class="hidden space-y-4 mt-6 text-center">
-    <h2 class="text-xl font-bold">Enter Room Code</h2>
-    <input id="roomCodeInput" class="text-black px-4 py-2 rounded" placeholder="Room Code" />
-    <button id="btnJoin" class="bg-blue-600 px-4 py-2 rounded hover:bg-blue-500">Join</button>
+  <!-- Receiver UI -->
+  <div id="receiveUI" class="hidden flex flex-col items-center space-y-4">
+    <input id="roomCodeInput" placeholder="Enter Room Code" class="text-black px-4 py-2 rounded w-64"/>
+    <button id="btnJoin" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded">Join</button>
   </div>
 
-  <!-- Step 4: Chat + File -->
-  <div id="chatUI" class="hidden w-full max-w-lg mt-10">
-    <div id="chatLog" class="bg-gray-800 p-4 rounded h-64 overflow-y-auto mb-4 text-sm whitespace-pre-wrap"></div>
-    <input id="messageInput" class="text-black w-full px-4 py-2 rounded mb-2" placeholder="Type a message" />
-    <div class="flex gap-2">
-      <input type="file" id="fileInput" class="text-sm" />
-      <button id="btnSendMsg" class="bg-green-600 px-4 py-2 rounded hover:bg-green-500">Send</button>
+  <!-- Chat UI -->
+  <div id="chatUI" class="hidden mt-8 w-full max-w-md">
+    <div id="connectionStatus" class="text-sm mb-2 text-green-400">🔄 Connecting...</div>
+    <div id="chat" class="bg-gray-900 rounded p-4 h-64 overflow-y-auto text-sm whitespace-pre-wrap mb-3"></div>
+
+    <input id="message" placeholder="Type a message..." class="text-black px-4 py-2 rounded w-full mb-2"/>
+    <input type="file" id="fileInput" class="text-sm mb-2"/>
+    <div class="flex justify-between">
+      <button onclick="sendText()" class="bg-green-600 px-4 py-2 rounded">Send Text</button>
+      <button onclick="sendFile()" class="bg-yellow-600 px-4 py-2 rounded">Send File</button>
     </div>
   </div>
 
   <script>
-    let role = null;
-    let roomCode = null;
-
     // Elements
-    const homeUI = document.getElementById("homeUI");
-    const sendUI = document.getElementById("sendUI");
-    const receiveUI = document.getElementById("receiveUI");
-    const chatUI = document.getElementById("chatUI");
+    const btnSend = document.getElementById("btnSend");
+    const btnReceive = document.getElementById("btnReceive");
+    const btnJoin = document.getElementById("btnJoin");
     const roomCodeDisplay = document.getElementById("roomCodeDisplay");
-    const qrcodeDiv = document.getElementById("qrcode");
+    const chatLog = document.getElementById("chat");
+    const status = document.getElementById("connectionStatus");
 
-    // Buttons
-    document.getElementById("btnSend").onclick = () => {
-      role = "send";
-      roomCode = Math.random().toString(36).substring(2, 8);
-      roomCodeDisplay.textContent = roomCode.toUpperCase();
-      new QRCode(qrcodeDiv, {
-        text: roomCode,
-        width: 128,
-        height: 128,
-        colorDark: "#ffffff",
-        colorLight: "#1f2937", // Tailwind bg-gray-800
-        correctLevel: QRCode.CorrectLevel.H
-      });
-      homeUI.classList.add("hidden");
-      sendUI.classList.remove("hidden");
-      setTimeout(() => showChat(), 3000); // simulate connection
+    let socket, pc, channel;
+    let roomCode, isInitiator;
+    const fileBuffer = {};
+    const chunkSize = 32 * 1024;
+    const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+    // UI Toggle
+    btnSend.onclick = () => {
+      roomCode = Math.random().toString(36).substr(2, 6).toUpperCase();
+      roomCodeDisplay.textContent = roomCode;
+      new QRCode("qrcode", { text: roomCode, width: 128, height: 128, colorDark: "#fff", colorLight: "#1f2937" });
+      isInitiator = true;
+      showSection("sendUI");
+      initSocket();
     };
 
-    document.getElementById("btnReceive").onclick = () => {
-      role = "receive";
-      homeUI.classList.add("hidden");
-      receiveUI.classList.remove("hidden");
-    };
+    btnReceive.onclick = () => showSection("receiveUI");
 
-    document.getElementById("btnJoin").onclick = () => {
-      roomCode = document.getElementById("roomCodeInput").value.trim();
+    btnJoin.onclick = () => {
+      roomCode = document.getElementById("roomCodeInput").value.trim().toUpperCase();
       if (roomCode) {
-        receiveUI.classList.add("hidden");
-        showChat();
+        isInitiator = false;
+        initSocket();
       }
     };
 
-    function showChat() {
-      chatUI.classList.remove("hidden");
-      log(`✅ Connected as ${role.toUpperCase()}\nRoom Code: ${roomCode.toUpperCase()}`);
+    function showSection(id) {
+      document.getElementById("selectRole").classList.add("hidden");
+      ["sendUI", "receiveUI"].forEach(e => document.getElementById(e)?.classList.add("hidden"));
+      document.getElementById(id).classList.remove("hidden");
     }
 
-    // Chat logic placeholder
-    document.getElementById("btnSendMsg").onclick = () => {
-      const msg = document.getElementById("messageInput").value.trim();
-      if (msg) {
-        log(`You: ${msg}`);
-        document.getElementById("messageInput").value = "";
+    function initSocket() {
+      socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ type: "join", room: roomCode }));
+        status.textContent = `🔐 Room: ${roomCode}`;
+      };
+
+      socket.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "ready") {
+          await startPeer();
+          if (isInitiator) {
+            channel = pc.createDataChannel("chat");
+            setupChannel();
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.send(JSON.stringify({ type: "signal", data: offer }));
+          }
+        } else if (msg.type === "signal") {
+          const signal = msg.data;
+          if (!pc) await startPeer();
+          if (signal.sdp) {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal));
+            if (signal.type === "offer") {
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              socket.send(JSON.stringify({ type: "signal", data: pc.localDescription }));
+            }
+          } else if (signal.candidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal));
+          }
+        }
+      };
+    }
+
+    async function startPeer() {
+      if (pc) return;
+      pc = new RTCPeerConnection(servers);
+      pc.onicecandidate = e => {
+        if (e.candidate) socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
+      };
+      pc.ondatachannel = e => {
+        channel = e.channel;
+        setupChannel();
+      };
+      document.getElementById("chatUI").classList.remove("hidden");
+    }
+
+    function setupChannel() {
+      channel.onopen = () => {
+        status.textContent = "✅ Connected!";
+        log("📶 Data Channel Open");
+      };
+      channel.onmessage = e => {
+        const data = JSON.parse(e.data);
+        if (data.type === "text") {
+          log("Peer: " + data.content);
+        } else if (data.type === "file-chunk") {
+          receiveFileChunk(data);
+        }
+      };
+    }
+
+    function sendText() {
+      const msg = document.getElementById("message").value;
+      if (msg && channel.readyState === "open") {
+        channel.send(JSON.stringify({ type: "text", content: msg }));
+        log("You: " + msg);
+        document.getElementById("message").value = "";
       }
-    };
+    }
+
+    function sendFile() {
+      const fileInput = document.getElementById("fileInput");
+      if (!fileInput.files.length) return alert("Select a file first!");
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      const fileId = Date.now().toString();
+
+      reader.onload = () => {
+        const buffer = reader.result;
+        const totalChunks = Math.ceil(buffer.byteLength / chunkSize);
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = buffer.slice(i * chunkSize, (i + 1) * chunkSize);
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(chunk)));
+          channel.send(JSON.stringify({
+            type: "file-chunk", fileId, filename: file.name, sequence: i, totalChunks,
+            data: base64, isLast: i === totalChunks - 1
+          }));
+        }
+        log("📤 Sent file: " + file.name);
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function receiveFileChunk(data) {
+      if (!fileBuffer[data.fileId]) fileBuffer[data.fileId] = [];
+      fileBuffer[data.fileId][data.sequence] = atob(data.data);
+
+      if (data.isLast) {
+        const binary = fileBuffer[data.fileId].join('');
+        const byteArray = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          byteArray[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([byteArray]);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = data.filename;
+        a.click();
+        log("✅ File received: " + data.filename);
+        delete fileBuffer[data.fileId];
+      }
+    }
 
     function log(msg) {
-      document.getElementById("chatLog").textContent += msg + "\n";
+      chatLog.textContent += msg + "\n";
+      chatLog.scrollTop = chatLog.scrollHeight;
     }
   </script>
 </body>
