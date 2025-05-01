@@ -86,6 +86,7 @@
 
   <div id="toastContainer"></div>
 
+
 <script>
 let socket, pc, channel;
 let roomCode = "", isInitiator = false;
@@ -95,8 +96,8 @@ const fileChunks = {}, fileMeta = {}, $ = id => document.getElementById(id);
 function startSend() {
   isInitiator = true;
   roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const roomUrl = window.location.origin + "/#" + roomCode;
-  $("roomLink").textContent = roomUrl;
+  const roomUrl = window.location.origin + "/webRTC#" + roomCode;
+  $("roomLink").textContent = "Room Code: " + roomCode + "\nLink: " + roomUrl;
   $("roomLink").href = roomUrl;
   $("qrcode").innerHTML = "";
   new QRCode("qrcode", { text: roomUrl, width: 160, height: 160 });
@@ -261,5 +262,6 @@ window.onload = () => {
   }
 };
 </script>
+
 </body>
 </html>
