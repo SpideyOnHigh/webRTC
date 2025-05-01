@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OESS DROP</title>
+  <title>PeerDrop — Auto Join</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
@@ -25,28 +25,11 @@
     .btn:hover {
       background: rgba(255,255,255,0.15);
     }
-    .toast {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      background: #1e293b;
-      color: white;
-      padding: 0.75rem 1rem;
-      border-radius: 0.5rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      animation: fade 4s ease forwards;
-      opacity: 0;
-    }
-    @keyframes fade {
-      0% { opacity: 0; transform: translateY(20px); }
-      10%, 90% { opacity: 1; transform: translateY(0); }
-      100% { opacity: 0; transform: translateY(20px); }
-    }
   </style>
 </head>
 <body class="min-h-screen flex items-center justify-center px-4 py-8">
   <div class="glass rounded-xl shadow-xl w-full max-w-xl p-6 space-y-6 text-center">
-    <h1 class="text-3xl font-bold text-white">OEDROP</h1>
+    <h1 class="text-3xl font-bold text-white">PeerDrop</h1>
     <p class="text-sm text-gray-400">P2P File Sharing with QR Join Links</p>
 
     <div id="roleUI" class="flex flex-col gap-4">
@@ -71,8 +54,6 @@
     </div>
   </div>
 
-  <div id="toastContainer"></div>
-
 <script>
 let socket, pc, channel;
 let roomCode = "", isInitiator = false;
@@ -84,11 +65,8 @@ function startSend() {
   const roomUrl = window.location.origin + "/#" + roomCode;
   $("roomLink").textContent = roomUrl;
   $("roomLink").href = roomUrl;
-
-  // Clear old QR
   $("qrcode").innerHTML = "";
   new QRCode("qrcode", { text: roomUrl, width: 160, height: 160 });
-
   show("sendUI");
   connect();
 }
@@ -122,6 +100,17 @@ function connect() {
     socket.send(JSON.stringify({ type: "join", room: roomCode }));
   };
 }
+
+window.onload = () => {
+  const hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    roomCode = hash.substring(1).toUpperCase();
+    isInitiator = false;
+    connect();
+    show("receiveUI");
+    $("roomInput").value = roomCode;
+  }
+};
 </script>
 </body>
 </html>
