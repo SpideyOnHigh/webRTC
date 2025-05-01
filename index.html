@@ -1,218 +1,203 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>WebRTC File & Chat</title>
+  <title>PeerShare — P2P Transfer</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(to right, #0f172a, #1e293b);
+      color: #f1f5f9;
+    }
     .glass {
-      backdrop-filter: blur(12px);
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
     }
-    .btn-glass {
-      background: rgba(255,255,255,0.1);
-      padding: 0.75rem;
-      width: 100%;
-      border-radius: 0.5rem;
-      transition: 0.3s;
+    .btn {
+      background: rgba(255,255,255,0.07);
+      transition: all 0.2s ease-in-out;
     }
-    .btn-glass:hover {
-      background: rgba(255,255,255,0.2);
+    .btn:hover {
+      background: rgba(255,255,255,0.15);
     }
     .loader {
       border: 4px solid rgba(255,255,255,0.2);
-      border-top: 4px solid white;
+      border-top: 4px solid #f8fafc;
       border-radius: 50%;
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
       animation: spin 1s linear infinite;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
-<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
-  <div class="glass max-w-lg w-full p-6 rounded-xl shadow-lg text-center space-y-4">
-    <h1 class="text-3xl font-bold">🚀 WebRTC File & Chat</h1>
+<body class="min-h-screen flex items-center justify-center px-4 py-8">
+  <div class="glass rounded-xl shadow-xl w-full max-w-xl p-8 space-y-6">
+    <h1 class="text-3xl font-bold text-center text-white">PeerShare</h1>
+    <p class="text-center text-sm text-gray-400">Secure P2P Chat & File Transfer</p>
 
-    <div id="roleSelect">
-      <button id="btnSend" class="btn-glass">📤 Send</button>
-      <button id="btnReceive" class="btn-glass mt-2">📥 Receive</button>
+    <div id="roleUI" class="flex flex-col gap-4">
+      <button onclick="startSend()" class="btn rounded-lg px-4 py-2 w-full text-white">📤 Send</button>
+      <button onclick="startReceive()" class="btn rounded-lg px-4 py-2 w-full text-white">📥 Receive</button>
     </div>
 
-    <div id="sendUI" class="hidden space-y-3">
-      <p class="text-sm text-gray-300">Share this code with receiver:</p>
-      <div id="roomCode" class="text-xl font-mono bg-gray-800 px-3 py-2 rounded"></div>
+    <div id="sendUI" class="hidden space-y-4 text-center">
+      <p class="text-gray-300 text-sm">Share this room code</p>
+      <div id="roomCode" class="text-2xl font-mono tracking-widest px-4 py-2 bg-gray-800 inline-block rounded-md"></div>
       <div id="qrcode" class="mx-auto"></div>
-      <p class="text-xs text-gray-400">Waiting for peer to connect...</p>
+      <p class="text-xs text-gray-400 mt-2">Waiting for peer to connect...</p>
       <div class="loader mx-auto"></div>
     </div>
 
     <div id="receiveUI" class="hidden space-y-3">
-      <input id="roomInput" placeholder="Enter Room Code" class="text-black px-4 py-2 rounded w-full"/>
-      <button id="btnJoin" class="btn-glass">Join Room</button>
+      <input id="roomInput" placeholder="Enter Room Code" class="w-full px-4 py-2 rounded text-black" />
+      <button onclick="joinRoom()" class="btn w-full rounded-lg px-4 py-2 text-white">🔗 Join</button>
     </div>
 
-    <div id="chatUI" class="hidden space-y-2">
-      <div id="connectionStatus" class="text-sm text-green-400">🔗 Connecting...</div>
-      <div id="chat" class="bg-gray-800 h-48 rounded overflow-y-auto p-2 text-left text-sm"></div>
-      <input id="message" class="text-black px-3 py-2 w-full rounded" placeholder="Type a message..."/>
-      <input type="file" id="fileInput" class="w-full"/>
+    <div id="chatUI" class="hidden space-y-3">
+      <div id="connectionStatus" class="text-xs text-green-400">🟢 Connected</div>
+      <div id="chat" class="bg-gray-800 rounded p-3 h-48 overflow-y-auto text-sm flex flex-col gap-2"></div>
+      <input id="message" placeholder="Message..." class="w-full px-3 py-2 text-black rounded" />
+      <input type="file" id="fileInput" class="w-full text-sm text-gray-400" />
       <div class="flex gap-2">
-        <button id="btnText" class="btn-glass flex-1">Send Text</button>
-        <button id="btnFile" class="btn-glass flex-1">Send File</button>
+        <button class="btn flex-1 rounded px-3 py-2 text-white" onclick="sendText()">💬 Send</button>
+        <button class="btn flex-1 rounded px-3 py-2 text-white" onclick="sendFile()">📎 Send File</button>
       </div>
     </div>
   </div>
 
-  <script>
-    let socket, pc, channel;
-    let isInitiator = false;
-    let roomCode = null;
-    const fileChunks = {};
-    const chunkSize = 32 * 1024;
+<script>
+let socket, pc, channel;
+let roomCode = "", isInitiator = false;
+const fileChunks = {}, chunkSize = 32 * 1024;
+const $ = id => document.getElementById(id);
 
-    const $ = id => document.getElementById(id);
+function startSend() {
+  isInitiator = true;
+  roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+  $("roomCode").textContent = roomCode;
+  new QRCode("qrcode", { text: roomCode, width: 128, height: 128 });
+  show("sendUI");
+  connect();
+}
 
-    $("#btnSend").onclick = () => {
-      isInitiator = true;
-      roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-      $("#roomCode").textContent = roomCode;
-      new QRCode($("#qrcode"), { text: roomCode, width: 128, height: 128 });
-      toggle("roleSelect", "sendUI");
-      connectSocket();
-    };
+function startReceive() {
+  show("receiveUI");
+}
 
-    $("#btnReceive").onclick = () => toggle("roleSelect", "receiveUI");
+function joinRoom() {
+  roomCode = $("roomInput").value.trim().toUpperCase();
+  if (roomCode) { isInitiator = false; connect(); }
+}
 
-    $("#btnJoin").onclick = () => {
-      roomCode = $("#roomInput").value.trim().toUpperCase();
-      if (roomCode) {
-        isInitiator = false;
-        connectSocket();
-      }
-    };
+function show(id) {
+  ["roleUI", "sendUI", "receiveUI", "chatUI"].forEach(x => $(x).classList.add("hidden"));
+  $(id).classList.remove("hidden");
+}
 
-    $("#btnText").onclick = sendText;
-    $("#btnFile").onclick = sendFile;
-
-    function toggle(hideId, showId) {
-      $(hideId).classList.add("hidden");
-      $(showId).classList.remove("hidden");
-    }
-
-    function connectSocket() {
-      socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
-      socket.onopen = () => {
-        socket.send(JSON.stringify({ type: "join", room: roomCode }));
-      };
-      socket.onmessage = async e => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "ready") {
-          await setupConnection();
-          if (isInitiator) {
-            channel = pc.createDataChannel("chat");
-            setupChannel();
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            socket.send(JSON.stringify({ type: "signal", data: offer }));
-          }
-        } else if (msg.type === "signal") {
-          if (!pc) await setupConnection();
-          if (msg.data.sdp) {
-            await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
-            if (msg.data.type === "offer") {
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              socket.send(JSON.stringify({ type: "signal", data: pc.localDescription }));
-            }
-          } else if (msg.data.candidate) {
-            await pc.addIceCandidate(new RTCIceCandidate(msg.data));
-          }
-        }
-      };
-    }
-
-    async function setupConnection() {
-      pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-      pc.onicecandidate = e => {
-        if (e.candidate) socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
-      };
-      pc.ondatachannel = e => {
-        channel = e.channel;
+function connect() {
+  socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
+  socket.onopen = () => socket.send(JSON.stringify({ type: "join", room: roomCode }));
+  socket.onmessage = async e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === "ready") {
+      await initPeer();
+      if (isInitiator) {
+        channel = pc.createDataChannel("chat");
         setupChannel();
-      };
-      $("#chatUI").classList.remove("hidden");
-    }
-
-    function setupChannel() {
-      channel.onopen = () => {
-        $("#connectionStatus").textContent = "✅ Connected!";
-        log("🟢 Data Channel Open");
-      };
-      channel.onmessage = e => {
-        const data = JSON.parse(e.data);
-        if (data.type === "text") log("Peer: " + data.content);
-        else if (data.type === "file-chunk") receiveChunk(data);
-      };
-    }
-
-    function sendText() {
-      const msg = $("#message").value.trim();
-      if (msg && channel?.readyState === "open") {
-        channel.send(JSON.stringify({ type: "text", content: msg }));
-        log("You: " + msg);
-        $("#message").value = "";
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.send(JSON.stringify({ type: "signal", data: offer }));
       }
-    }
-
-    function sendFile() {
-      const file = $("#fileInput").files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      const fileId = Date.now().toString();
-      reader.onload = () => {
-        const buffer = reader.result;
-        const totalChunks = Math.ceil(buffer.byteLength / chunkSize);
-        for (let i = 0; i < totalChunks; i++) {
-          const chunk = buffer.slice(i * chunkSize, (i + 1) * chunkSize);
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(chunk)));
-          channel.send(JSON.stringify({
-            type: "file-chunk", fileId, filename: file.name,
-            sequence: i, data: base64, isLast: i === totalChunks - 1
-          }));
+    } else if (msg.type === "signal") {
+      if (!pc) await initPeer();
+      if (msg.data.sdp) {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+        if (msg.data.type === "offer") {
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.send(JSON.stringify({ type: "signal", data: pc.localDescription }));
         }
-        log("📤 Sent file: " + file.name);
-      };
-      reader.readAsArrayBuffer(file);
-    }
-
-    function receiveChunk(data) {
-      if (!fileChunks[data.fileId]) fileChunks[data.fileId] = [];
-      fileChunks[data.fileId][data.sequence] = atob(data.data);
-      if (data.isLast) {
-        const binary = fileChunks[data.fileId].join('');
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const blob = new Blob([bytes]);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = data.filename;
-        a.click();
-        log("✅ Received: " + data.filename);
+      } else if (msg.data.candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(msg.data));
       }
     }
+  };
+}
 
-    function log(msg) {
-      const chat = $("#chat");
-      chat.textContent += msg + "\\n";
-      chat.scrollTop = chat.scrollHeight;
+async function initPeer() {
+  pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  pc.onicecandidate = e => e.candidate && socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
+  pc.ondatachannel = e => { channel = e.channel; setupChannel(); };
+}
+
+function setupChannel() {
+  channel.onopen = () => {
+    show("chatUI");
+    $("connectionStatus").textContent = "✅ Connected to peer";
+    log("🟢 Data Channel is open", "sys");
+  };
+  channel.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === "text") log("Peer: " + data.content, "peer");
+    else if (data.type === "file-chunk") receiveChunk(data);
+  };
+}
+
+function sendText() {
+  const msg = $("message").value.trim();
+  if (msg && channel?.readyState === "open") {
+    channel.send(JSON.stringify({ type: "text", content: msg }));
+    log("You: " + msg, "you");
+    $("message").value = "";
+  }
+}
+
+function sendFile() {
+  const file = $("fileInput").files[0];
+  if (!file) return;
+  const reader = new FileReader(), fileId = Date.now().toString();
+  reader.onload = () => {
+    const buf = reader.result, total = Math.ceil(buf.byteLength / chunkSize);
+    for (let i = 0; i < total; i++) {
+      const chunk = buf.slice(i * chunkSize, (i + 1) * chunkSize);
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(chunk)));
+      channel.send(JSON.stringify({
+        type: "file-chunk", fileId, filename: file.name,
+        sequence: i, data: b64, isLast: i === total - 1
+      }));
     }
-  </script>
+    log(`📤 File sent: ${file.name}`, "you");
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function receiveChunk(data) {
+  if (!fileChunks[data.fileId]) fileChunks[data.fileId] = [];
+  fileChunks[data.fileId][data.sequence] = atob(data.data);
+  if (data.isLast) {
+    const bin = fileChunks[data.fileId].join(''), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes]), url = URL.createObjectURL(blob);
+    log(`📥 File received: ${data.filename}<br><a href="${url}" download="${data.filename}" class="text-blue-400 underline text-xs">Click to download</a>`, "peer");
+  }
+}
+
+function log(msg, cls = "") {
+  const div = document.createElement("div");
+  div.className = "text-sm px-3 py-2 rounded bg-gray-700";
+  if (cls === "you") div.classList.add("self-end", "bg-green-700");
+  if (cls === "peer") div.classList.add("self-start", "bg-blue-700");
+  div.innerHTML = msg;
+  $("chat").appendChild(div);
+  $("chat").scrollTop = $("chat").scrollHeight;
+}
+</script>
 </body>
 </html>
