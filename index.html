@@ -8,72 +8,39 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      background: linear-gradient(to right, #0f172a, #1e293b);
-      color: #f1f5f9;
-    }
-    .glass {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      backdrop-filter: blur(14px);
-    }
-    .btn {
-      background: rgba(255,255,255,0.07);
-      transition: all 0.2s ease-in-out;
-    }
-    .btn:hover {
-      background: rgba(255,255,255,0.15);
-    }
-    .toast {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      background: #1e293b;
-      color: white;
-      padding: 0.75rem 1rem;
-      border-radius: 0.5rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      animation: fade 4s ease forwards;
-      opacity: 0;
-    }
-    @keyframes fade {
-      0% { opacity: 0; transform: translateY(20px); }
-      10%, 90% { opacity: 1; transform: translateY(0); }
-      100% { opacity: 0; transform: translateY(20px); }
-    }
+    body { font-family: 'Inter', sans-serif; background: #0f172a; color: #f1f5f9; }
+    .glass { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); backdrop-filter: blur(14px); }
+    .btn { background: rgba(255,255,255,0.07); }
+    .btn:hover { background: rgba(255,255,255,0.15); }
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #1e293b; padding: 0.75rem 1rem; border-radius: 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.4); color: white; animation: fade 4s ease forwards; opacity: 0; }
+    @keyframes fade { 0% {opacity:0;transform:translateY(20px);} 10%,90%{opacity:1;transform:translateY(0);} 100%{opacity:0;transform:translateY(20px);} }
   </style>
 </head>
 <body class="min-h-screen flex items-center justify-center px-4 py-8">
   <div class="glass rounded-xl shadow-xl w-full max-w-xl p-6 space-y-6 text-center">
     <h1 class="text-3xl font-bold text-white">OESS DropBox</h1>
     <p class="text-sm text-gray-400">P2P Chat & File Transfer — Secure and Unlimited</p>
-
     <div id="roleUI" class="flex flex-col gap-4">
       <button onclick="startSend()" class="btn rounded-lg px-4 py-2 w-full text-white">📤 Send</button>
       <button onclick="startReceive()" class="btn rounded-lg px-4 py-2 w-full text-white">📥 Receive</button>
     </div>
-
     <div id="sendUI" class="hidden space-y-4">
-      <p class="text-sm text-gray-300">Scan or share this link</p>
+      <p class="text-sm text-gray-300">Share this room</p>
+      <div class="text-white text-sm"><b>Room:</b> <span id="roomCode"></span></div>
       <a id="roomLink" href="#" target="_blank" class="text-blue-400 underline break-all text-sm"></a>
-      <div class="flex justify-center">
-        <div id="qrcode" class="my-2"></div>
-      </div>
-      <p class="text-xs text-gray-400">Waiting for peer to connect...</p>
+      <div class="flex justify-center"><div id="qrcode" class="my-2"></div></div>
+      <p class="text-xs text-gray-400">Waiting for peer...</p>
       <button onclick="leaveRoom()" class="btn text-sm mt-2">Leave Room</button>
     </div>
-
     <div id="receiveUI" class="hidden space-y-3">
       <input id="roomInput" placeholder="Enter Room Code" class="w-full px-4 py-2 rounded text-black" />
       <button onclick="joinRoom()" class="btn w-full rounded-lg px-4 py-2 text-white">🔗 Join</button>
       <button onclick="leaveRoom()" class="btn text-sm mt-2">Back</button>
     </div>
-
     <div id="chatUI" class="hidden space-y-3">
       <div id="connectionStatus" class="text-xs text-green-400">🟢 Connected</div>
       <div id="chat" class="bg-gray-800 rounded p-3 h-48 overflow-y-auto text-sm flex flex-col gap-2"></div>
-      <progress id="fileProgress"><div class="flex justify-between text-xs text-gray-400 mt-1"><span id="filePercent"></span><span id="fileETA"></span></div> value="0" max="100" class="w-full h-2 hidden"></progress>
+      <progress id="fileProgress" value="0" max="100" class="w-full h-2 hidden"></progress>
       <input id="message" placeholder="Message..." class="w-full px-3 py-2 text-black rounded" />
       <input type="file" id="fileInput" class="w-full text-sm text-gray-400" />
       <div class="flex gap-2">
@@ -83,9 +50,7 @@
       <button onclick="leaveRoom()" class="btn text-sm mt-2">🚪 Leave Room</button>
     </div>
   </div>
-
   <div id="toastContainer"></div>
-
 
 <script>
 let socket, pc, channel;
@@ -96,7 +61,8 @@ const fileChunks = {}, fileMeta = {}, $ = id => document.getElementById(id);
 function startSend() {
   isInitiator = true;
   roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const roomUrl = window.location.origin + "/#" + roomCode;
+  const roomUrl = window.location.origin + "/webRTC#" + roomCode;
+  $("roomCode").textContent = roomCode;
   $("roomLink").textContent = roomUrl;
   $("roomLink").href = roomUrl;
   $("qrcode").innerHTML = "";
@@ -105,9 +71,7 @@ function startSend() {
   connect();
 }
 
-function startReceive() {
-  show("receiveUI");
-}
+function startReceive() { show("receiveUI"); }
 
 function joinRoom() {
   roomCode = $("roomInput").value.trim().toUpperCase();
@@ -143,7 +107,9 @@ function toast(msg) {
 
 function connect() {
   socket = new WebSocket("wss://webrtc-node-0s89.onrender.com");
-  socket.onopen = () => socket.send(JSON.stringify({ type: "join", room: roomCode }));
+  socket.onopen = () => {
+    socket.send(JSON.stringify({ type: "join", room: roomCode }));
+  };
   socket.onmessage = async e => {
     const msg = JSON.parse(e.data);
     if (msg.type === "ready") {
@@ -172,7 +138,16 @@ function connect() {
 }
 
 async function initPeer() {
-  pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      {
+        urls: "turn:global.relay.metered.ca:443",
+        username: "openai",
+        credential: "openai123"
+      }
+    ]
+  });
   pc.onicecandidate = e => e.candidate && socket.send(JSON.stringify({ type: "signal", data: e.candidate }));
   pc.ondatachannel = e => { channel = e.channel; setupChannel(); };
 }
@@ -212,8 +187,7 @@ function setupChannel() {
 function sendText() {
   const msg = $("message").value.trim();
   if (msg && channel?.readyState === "open") {
-    const now = Date.now(); if (!window._chunkStartTime) window._chunkStartTime = now; const elapsed = (now - window._chunkStartTime) / 1000; const percent = Math.round((i / totalChunks) * 100); $("filePercent").textContent = percent + "%"; const eta = Math.round((elapsed / (i + 1)) * (totalChunks - i - 1)); $("fileETA").textContent = eta + "s remaining";
-        channel.send(JSON.stringify({ type: "text", content: msg }));
+    channel.send(JSON.stringify({ type: "text", content: msg }));
     log(msg, "you");
     $("message").value = "";
   }
@@ -225,14 +199,12 @@ function sendFile() {
   const reader = new FileReader(), fileId = Date.now().toString();
   reader.onload = () => {
     const buf = reader.result, totalChunks = Math.ceil(buf.byteLength / chunkSize);
-    const now = Date.now(); if (!window._chunkStartTime) window._chunkStartTime = now; const elapsed = (now - window._chunkStartTime) / 1000; const percent = Math.round((i / totalChunks) * 100); $("filePercent").textContent = percent + "%"; const eta = Math.round((elapsed / (i + 1)) * (totalChunks - i - 1)); $("fileETA").textContent = eta + "s remaining";
-        channel.send(JSON.stringify({ type: "file-meta", fileId, filename: file.name, totalChunks }));
+    channel.send(JSON.stringify({ type: "file-meta", fileId, filename: file.name, totalChunks }));
     toast(`Sending file: ${file.name}`);
     for (let i = 0; i < totalChunks; i++) {
-      setTimeout(() => { const start = Date.now();
+      setTimeout(() => {
         const chunk = buf.slice(i * chunkSize, (i + 1) * chunkSize);
         const b64 = btoa(String.fromCharCode(...new Uint8Array(chunk)));
-        const now = Date.now(); if (!window._chunkStartTime) window._chunkStartTime = now; const elapsed = (now - window._chunkStartTime) / 1000; const percent = Math.round((i / totalChunks) * 100); $("filePercent").textContent = percent + "%"; const eta = Math.round((elapsed / (i + 1)) * (totalChunks - i - 1)); $("fileETA").textContent = eta + "s remaining";
         channel.send(JSON.stringify({
           type: "file-chunk", fileId, sequence: i, data: b64, isLast: i === totalChunks - 1
         }));
@@ -265,6 +237,5 @@ window.onload = () => {
   }
 };
 </script>
-
 </body>
 </html>
